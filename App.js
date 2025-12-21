@@ -25,7 +25,13 @@ Notifications.setNotificationHandler({
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-const TaskItem = ({ item, index, onDelete, onComplete }) => {
+const CARD_COLORS = [
+  '#FFD1DC', '#FFDAC1', '#FFF5BA', '#C1E1C1', 
+  '#B5EAD7', '#C7CEEA', '#E2F0CB', '#FF9AA2', 
+];
+
+// --- TASK ITEM COMPONENT ---
+const TaskItem = ({ item, onDelete, onComplete }) => {
   const [isChecked, setIsChecked] = useState(false);
   const translateX = useRef(new Animated.Value(0)).current; 
   const [action, setAction] = useState(null); 
@@ -37,13 +43,14 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
 
     Animated.timing(translateX, {
       toValue: SCREEN_WIDTH, 
-      duration: 600, 
+      duration: 500, // Slightly faster to handle rapid clicks
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)), 
     }).start(() => {
+      // Reduced delay slightly so list updates faster
       setTimeout(() => {
-        onComplete(index); 
-      }, 300);
+        onComplete(item.id); 
+      }, 200);
     });
   };
 
@@ -52,13 +59,13 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
     
     Animated.timing(translateX, {
       toValue: -SCREEN_WIDTH, 
-      duration: 600,
+      duration: 500,
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)),
     }).start(() => {
       setTimeout(() => {
-        onDelete(index);
-      }, 300);
+        onDelete(item.id);
+      }, 200);
     });
   };
 
@@ -67,7 +74,7 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
       styles.taskContainerBackground, 
       action === 'complete' ? { backgroundColor: '#4CAF50' } : 
       action === 'delete' ? { backgroundColor: '#FF6347' } : 
-      { backgroundColor: '#FFF' } 
+      { backgroundColor: 'transparent' } 
     ]}>
       
       {action === 'complete' && (
@@ -83,9 +90,16 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
       )}
 
       <Animated.View style={{ transform: [{ translateX }] }}>
-        <View style={styles.item}>
+        <View style={[styles.item, { backgroundColor: item.color || '#FFF' }]}>
           <View style={styles.itemLeft}>
-            <TouchableOpacity style={[styles.square, isChecked && styles.squareChecked]} onPress={handleComplete}>
+            
+            {/* 1. BIGGER CLICK AREA (hitSlop) */}
+            <TouchableOpacity 
+              style={[styles.square, isChecked && styles.squareChecked]} 
+              onPress={handleComplete}
+              // This expands the clickable area by 20px on all sides!
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
               {isChecked && <Text style={styles.tick}>✓</Text>}
             </TouchableOpacity>
             
@@ -112,7 +126,12 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
             </View>
           </View>
 
-          <TouchableOpacity onPress={handleDelete} style={styles.trashContainer}>
+          {/* Also added hitSlop to delete button for easier access */}
+          <TouchableOpacity 
+            onPress={handleDelete} 
+            style={styles.trashContainer}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
             <Text style={styles.trashIcon}>🗑️</Text>
           </TouchableOpacity>
         </View>
@@ -169,14 +188,10 @@ export default function App() {
     catch (error) { console.log(error); }
   }
 
-  // --- UPDATED LOGIC HERE ---
   const handleIconPress = (type) => {
     if (type === 'notification' && notificationTime) { setNotificationTime(null); return; }
     if (type === 'alarm' && alarmTime) { setAlarmTime(null); return; }
-    
-    // FIX: Update the picker to the CURRENT time right now!
     setDate(new Date()); 
-    
     setEditingType(type);
     setShowPicker(true);
   };
@@ -194,13 +209,21 @@ export default function App() {
   const handleAddTask = () => {
     Keyboard.dismiss();
     if (task) {
+      // Use standard animation for adding
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       
+      let randomColor;
+      let lastColor = null;
+      if (taskItems.length > 0) lastColor = taskItems[taskItems.length - 1].color;
+      const availableColors = CARD_COLORS.filter(color => color !== lastColor);
+      randomColor = availableColors[Math.floor(Math.random() * availableColors.length)];
+
       const newTask = { 
         id: Date.now().toString(), 
         text: task, 
         notificationTime: notificationTime,
-        alarmTime: alarmTime
+        alarmTime: alarmTime,
+        color: randomColor 
       };
       
       const newItems = [...taskItems, newTask];
@@ -216,12 +239,18 @@ export default function App() {
     }
   }
 
-  const deleteTask = (index) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
-    let itemsCopy = [...taskItems];
-    itemsCopy.splice(index, 1);
-    setTaskItems(itemsCopy);
-    saveTasksToPhone(itemsCopy);
+  // --- FIXED RAPID DELETE ---
+  const deleteTask = (id) => {
+    // 2. Changed from 'spring' to 'easeInEaseOut'
+    // Spring is bouncy and gets confused when many items are deleted at once.
+    // EaseInEaseOut is cleaner for rapid list changes.
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    
+    setTaskItems(prevItems => {
+      const updatedItems = prevItems.filter(item => item.id !== id);
+      saveTasksToPhone(updatedItems); 
+      return updatedItems;
+    });
   }
 
   const scheduleAlarm = async (taskName, triggerDate, type) => {
@@ -254,11 +283,10 @@ export default function App() {
           <Text style={styles.sectionTitle}>My Daily Tasks ✨</Text>
 
           <View style={styles.items}>
-            {taskItems.map((item, index) => {
+            {taskItems.map((item) => {
               return (
                 <TaskItem 
                   key={item.id} 
-                  index={index}
                   item={item}
                   onDelete={deleteTask}
                   onComplete={deleteTask}
@@ -320,16 +348,29 @@ const styles = StyleSheet.create({
   bgTextContainerLeft: { position: 'absolute', left: 20, zIndex: 0 },
   bgTextContainerRight: { position: 'absolute', right: 20, zIndex: 0 },
   bgText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', textTransform: 'uppercase' },
-  item: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  
+  item: { 
+    padding: 15, 
+    borderRadius: 15, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    elevation: 2 
+  },
+  
   itemLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1 }, 
-  square: { width: 24, height: 24, backgroundColor: '#AEC6CF', opacity: 0.4, borderRadius: 5, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
+  square: { width: 24, height: 24, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 5, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
   squareChecked: { backgroundColor: '#4CAF50', opacity: 1 },
   tick: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  textCompleted: { textDecorationLine: 'line-through', color: '#D3D3D3' },
+  textCompleted: { textDecorationLine: 'line-through', color: '#666' },
   itemText: { fontSize: 16, color: '#333' },
   timeRow: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginTop: 2 },
   iconSmall: { fontSize: 12, marginRight: 4 },
-  timeText: { fontSize: 12, color: '#888', fontWeight: 'bold' }, 
+  timeText: { fontSize: 12, color: '#555', fontWeight: 'bold' }, 
   trashContainer: { padding: 5 },
   trashIcon: { fontSize: 20, opacity: 0.5 },
   writeTaskWrapper: { position: 'absolute', bottom: 30, width: '100%', flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' },
