@@ -30,7 +30,6 @@ const CARD_COLORS = [
   '#B5EAD7', '#C7CEEA', '#E2F0CB', '#FF9AA2', 
 ];
 
-// --- TASK ITEM COMPONENT ---
 const TaskItem = ({ item, onDelete, onComplete }) => {
   const [isChecked, setIsChecked] = useState(false);
   const translateX = useRef(new Animated.Value(0)).current; 
@@ -43,11 +42,10 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
 
     Animated.timing(translateX, {
       toValue: SCREEN_WIDTH, 
-      duration: 500, // Slightly faster to handle rapid clicks
+      duration: 500, 
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)), 
     }).start(() => {
-      // Reduced delay slightly so list updates faster
       setTimeout(() => {
         onComplete(item.id); 
       }, 200);
@@ -76,28 +74,15 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
       action === 'delete' ? { backgroundColor: '#FF6347' } : 
       { backgroundColor: 'transparent' } 
     ]}>
-      
-      {action === 'complete' && (
-        <View style={styles.bgTextContainerLeft}>
-          <Text style={styles.bgText}>Completed</Text>
-        </View>
-      )}
-
-      {action === 'delete' && (
-        <View style={styles.bgTextContainerRight}>
-          <Text style={styles.bgText}>Deleted</Text>
-        </View>
-      )}
+      {action === 'complete' && <View style={styles.bgTextContainerLeft}><Text style={styles.bgText}>Completed</Text></View>}
+      {action === 'delete' && <View style={styles.bgTextContainerRight}><Text style={styles.bgText}>Deleted</Text></View>}
 
       <Animated.View style={{ transform: [{ translateX }] }}>
         <View style={[styles.item, { backgroundColor: item.color || '#FFF' }]}>
           <View style={styles.itemLeft}>
-            
-            {/* 1. BIGGER CLICK AREA (hitSlop) */}
             <TouchableOpacity 
               style={[styles.square, isChecked && styles.squareChecked]} 
               onPress={handleComplete}
-              // This expands the clickable area by 20px on all sides!
               hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             >
               {isChecked && <Text style={styles.tick}>✓</Text>}
@@ -126,12 +111,7 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
             </View>
           </View>
 
-          {/* Also added hitSlop to delete button for easier access */}
-          <TouchableOpacity 
-            onPress={handleDelete} 
-            style={styles.trashContainer}
-            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-          >
+          <TouchableOpacity onPress={handleDelete} style={styles.trashContainer} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
             <Text style={styles.trashIcon}>🗑️</Text>
           </TouchableOpacity>
         </View>
@@ -209,7 +189,6 @@ export default function App() {
   const handleAddTask = () => {
     Keyboard.dismiss();
     if (task) {
-      // Use standard animation for adding
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       
       let randomColor;
@@ -239,13 +218,8 @@ export default function App() {
     }
   }
 
-  // --- FIXED RAPID DELETE ---
   const deleteTask = (id) => {
-    // 2. Changed from 'spring' to 'easeInEaseOut'
-    // Spring is bouncy and gets confused when many items are deleted at once.
-    // EaseInEaseOut is cleaner for rapid list changes.
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    
     setTaskItems(prevItems => {
       const updatedItems = prevItems.filter(item => item.id !== id);
       saveTasksToPhone(updatedItems); 
@@ -278,25 +252,35 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar style="auto" />
       
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }} keyboardShouldPersistTaps='handled'>
-        <View style={styles.tasksWrapper}>
-          <Text style={styles.sectionTitle}>My Daily Tasks ✨</Text>
-
-          <View style={styles.items}>
-            {taskItems.map((item) => {
-              return (
-                <TaskItem 
-                  key={item.id} 
-                  item={item}
-                  onDelete={deleteTask}
-                  onComplete={deleteTask}
-                />
-              )
-            })}
-          </View>
+      {/* 1. FIXED HEADER (Outside ScrollView) */}
+      <View style={styles.headerWrapper}>
+        <Text style={styles.sectionTitle}>My Daily Tasks ✨</Text>
+      </View>
+      
+      {/* 2. SCROLLABLE CONTENT */}
+      <ScrollView 
+        contentContainerStyle={{ 
+          flexGrow: 1, 
+          paddingBottom: 100,
+          paddingHorizontal: 20 // Moved padding here so list aligns with header
+        }} 
+        keyboardShouldPersistTaps='handled'
+      >
+        <View style={styles.items}>
+          {taskItems.map((item) => {
+            return (
+              <TaskItem 
+                key={item.id} 
+                item={item}
+                onDelete={deleteTask}
+                onComplete={deleteTask}
+              />
+            )
+          })}
         </View>
       </ScrollView>
 
+      {/* 3. FLOATING INPUT AREA */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
@@ -341,9 +325,19 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FDFCF0' },
-  tasksWrapper: { paddingTop: 80, paddingHorizontal: 20 },
-  sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#6A5ACD', marginBottom: 20 },
-  items: { marginTop: 10 },
+
+  // --- NEW FIXED HEADER STYLES ---
+  headerWrapper: {
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    backgroundColor: '#FDFCF0', // Matches background to hide scrolling items
+    zIndex: 1, // Ensures it stays on top
+  },
+  sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#6A5ACD' },
+  
+  items: { marginTop: 0 }, // Reset margin since header handles it
+  
   taskContainerBackground: { marginBottom: 20, borderRadius: 15, overflow: 'hidden', justifyContent: 'center' },
   bgTextContainerLeft: { position: 'absolute', left: 20, zIndex: 0 },
   bgTextContainerRight: { position: 'absolute', right: 20, zIndex: 0 },
