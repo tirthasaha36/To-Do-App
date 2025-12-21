@@ -3,9 +3,9 @@ import { KeyboardAvoidingView, StyleSheet, Text, View, TextInput, TouchableOpaci
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <--- NEW IMPORT
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Silence the annoying warnings
+// Ignore warnings
 LogBox.ignoreLogs([
   'expo-notifications: Android Push notifications',
   'functionality is not fully supported in Expo Go'
@@ -23,26 +23,23 @@ export default function App() {
   const [task, setTask] = useState();
   const [taskItems, setTaskItems] = useState([]);
   
-  // Date Picker States
+  // DATE & ALERT STATES
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [reminderTime, setReminderTime] = useState(null);
+  const [alertType, setAlertType] = useState(null); // 'notification' or 'alarm'
 
-  // 1. LOAD TASKS ON STARTUP
+  // 1. LOAD TASKS
   useEffect(() => {
     async function loadTasks() {
       try {
         const savedTasks = await AsyncStorage.getItem('myTasks');
-        if (savedTasks !== null) {
-          // We stored it as text (JSON), so we turn it back into an array
-          setTaskItems(JSON.parse(savedTasks)); 
-        }
+        if (savedTasks !== null) setTaskItems(JSON.parse(savedTasks)); 
       } catch (error) {
         console.log("Error loading tasks:", error);
       }
     }
 
-    // Setup Notifications
     async function setupNotifications() {
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
@@ -56,54 +53,78 @@ export default function App() {
       if (status !== 'granted') alert('Permission failed!');
     }
 
-    loadTasks(); // Load data
-    setupNotifications(); // Setup alarms
+    loadTasks();
+    setupNotifications();
   }, []);
 
-  // 2. SAVE FUNCTION (Helper)
+  // 2. SAVE HELPER
   const saveTasksToPhone = async (newItems) => {
     try {
-      // We must turn the array into a string (JSON) to save it
       await AsyncStorage.setItem('myTasks', JSON.stringify(newItems));
     } catch (error) {
       console.log("Error saving tasks:", error);
     }
   }
 
+  // 3. LOGIC TO HANDLE CLICKING BELL OR CLOCK
+  const handleIconPress = (type) => {
+    // If we click the SAME icon that is already active, UNSET it (Clear/Cancel)
+    if (reminderTime && alertType === type) {
+      setReminderTime(null);
+      setAlertType(null);
+      return; // Stop here
+    }
+
+    // Otherwise, set the type and Open the Picker
+    setAlertType(type);
+    setShowPicker(true);
+  };
+
   const onChangeTime = (event, selectedDate) => {
-    const currentDate = selectedDate || date;
-    setShowPicker(false); 
-    setDate(currentDate);
-    setReminderTime(currentDate);
+    setShowPicker(false);
+    if (selectedDate) {
+      const currentDate = selectedDate;
+      setDate(currentDate);
+      setReminderTime(currentDate);
+    } else {
+      // If user cancelled the picker, we reset the type if no time was previously set
+      if (!reminderTime) setAlertType(null);
+    }
   };
 
   const handleAddTask = () => {
     Keyboard.dismiss();
     if (task) {
-      const newTask = { text: task, time: reminderTime };
+      // Create the task object with the new alertType info
+      const newTask = { 
+        text: task, 
+        time: reminderTime, 
+        type: alertType // Save 'notification' or 'alarm'
+      };
+      
       const newItems = [...taskItems, newTask];
+      setTaskItems(newItems);
+      saveTasksToPhone(newItems);
       
-      setTaskItems(newItems); // Update Screen
-      saveTasksToPhone(newItems); // Update Storage 💾
-      
-      if (reminderTime) {
-        scheduleAlarm(task, reminderTime);
+      if (reminderTime && alertType) {
+        scheduleAlarm(task, reminderTime, alertType);
       }
       
+      // Reset everything
       setTask(null);
       setReminderTime(null);
+      setAlertType(null);
     }
   }
 
   const completeTask = (index) => {
     let itemsCopy = [...taskItems];
     itemsCopy.splice(index, 1);
-    
-    setTaskItems(itemsCopy); // Update Screen
-    saveTasksToPhone(itemsCopy); // Update Storage 💾
+    setTaskItems(itemsCopy);
+    saveTasksToPhone(itemsCopy);
   }
 
-  const scheduleAlarm = async (taskName, triggerDate) => {
+  const scheduleAlarm = async (taskName, triggerDate, type) => {
     const now = new Date();
     const triggerInSeconds = (triggerDate.getTime() - now.getTime()) / 1000;
 
@@ -112,10 +133,14 @@ export default function App() {
       return;
     }
 
+    // Customize the message based on Type
+    const title = type === 'alarm' ? "⏰ ALARM!" : "✨ Reminder";
+    const body = type === 'alarm' ? `URGENT: ${taskName}` : `Don't forget: ${taskName}`;
+
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "✨ It's Time!",
-        body: `Don't forget to: ${taskName}`,
+        title: title,
+        body: body,
         sound: 'default',
       },
       trigger: {
@@ -124,7 +149,9 @@ export default function App() {
         channelId: 'default',
       },
     });
-    alert(`Alarm set for ${triggerDate.toLocaleTimeString()}!`);
+    
+    // Optional: Visual confirmation
+    // alert(`${type === 'alarm' ? 'Alarm' : 'Notification'} set!`); 
   };
 
   return (
@@ -144,10 +171,10 @@ export default function App() {
                         <View style={styles.square}></View>
                         <View>
                           <Text style={styles.itemText}>{item.text}</Text>
-                          {/* Note: Dates loaded from storage come back as STRINGS, so we check formatting */}
+                          {/* Show Time AND Icon based on type */}
                           {item.time && (
                              <Text style={styles.timeText}>
-                               ⏰ {new Date(item.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                               {item.type === 'alarm' ? '⏰' : '🔔'} {new Date(item.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                              </Text>
                           )}
                         </View>
@@ -162,14 +189,34 @@ export default function App() {
       </ScrollView>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "padding"} // Changed 'height' to 'padding'
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20} // Adds a little spacing buffer
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
         style={styles.writeTaskWrapper}
       >
         <TextInput style={styles.input} placeholder={'Write a task'} value={task} onChangeText={text => setTask(text)} />
         
-        <TouchableOpacity onPress={() => setShowPicker(true)} style={styles.clockButton}>
-           <Text style={styles.clockText}>{reminderTime ? "✅" : "⏰"}</Text>
+        {/* BUTTON 1: Notification (Bell) */}
+        <TouchableOpacity 
+          onPress={() => handleIconPress('notification')} 
+          style={[
+            styles.iconButton, 
+            // If active, turn Blue
+            (reminderTime && alertType === 'notification') ? {backgroundColor: '#AEC6CF'} : null
+          ]}
+        >
+           <Text style={styles.iconText}>🔔</Text>
+        </TouchableOpacity>
+
+        {/* BUTTON 2: Alarm (Clock) */}
+        <TouchableOpacity 
+          onPress={() => handleIconPress('alarm')} 
+          style={[
+            styles.iconButton, 
+            // If active, turn Orange
+            (reminderTime && alertType === 'alarm') ? {backgroundColor: '#FFDAB9'} : null
+          ]}
+        >
+           <Text style={styles.iconText}>⏰</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => handleAddTask()}>
@@ -202,12 +249,14 @@ const styles = StyleSheet.create({
   itemLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   square: { width: 24, height: 24, backgroundColor: '#AEC6CF', opacity: 0.4, borderRadius: 5, marginRight: 15 },
   itemText: { maxWidth: '80%', fontSize: 16, color: '#333' },
-  timeText: { fontSize: 12, color: '#888', marginTop: 3 },
+  timeText: { fontSize: 12, color: '#888', marginTop: 3, fontWeight: 'bold' }, 
   circular: { width: 12, height: 12, borderColor: '#FFDAB9', borderWidth: 2, borderRadius: 5 },
-  writeTaskWrapper: { position: 'absolute', bottom: 30, width: '100%', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-  input: { paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#FFF', borderRadius: 60, borderColor: '#C0C0C0', borderWidth: 1, width: 200 },
+  writeTaskWrapper: { position: 'absolute', bottom: 30, width: '100%', flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' },
+  // Adjusted input width to fit 3 buttons
+  input: { paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#FFF', borderRadius: 60, borderColor: '#C0C0C0', borderWidth: 1, width: 180 }, 
   addWrapper: { width: 50, height: 50, backgroundColor: '#FFF', borderRadius: 60, justifyContent: 'center', alignItems: 'center', borderColor: '#C0C0C0', borderWidth: 1 },
   addText: {},
-  clockButton: { width: 50, height: 50, backgroundColor: '#E6E6FA', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  clockText: { fontSize: 20 }
+  // New General Icon Button Style
+  iconButton: { width: 45, height: 45, backgroundColor: '#E6E6FA', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
+  iconText: { fontSize: 18 }
 });
