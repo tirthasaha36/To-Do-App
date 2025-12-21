@@ -162,7 +162,8 @@ export default function App() {
       </ScrollView>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"} // Changed 'height' to 'padding'
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20} // Adds a little spacing buffer
         style={styles.writeTaskWrapper}
       >
         <TextInput style={styles.input} placeholder={'Write a task'} value={task} onChangeText={text => setTask(text)} />
