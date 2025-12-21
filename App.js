@@ -8,6 +8,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Import Vector Icons
+import { Feather } from '@expo/vector-icons'; 
 
 LogBox.ignoreLogs(['expo-notifications:']);
 
@@ -37,19 +39,26 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
 
   const handleComplete = () => {
     if (isChecked) return; 
+    
+    // 1. Show the Tick immediately
     setIsChecked(true);
     setAction('complete'); 
 
-    Animated.timing(translateX, {
-      toValue: SCREEN_WIDTH, 
-      duration: 500, 
-      useNativeDriver: true,
-      easing: Easing.out(Easing.poly(4)), 
-    }).start(() => {
-      setTimeout(() => {
-        onComplete(item.id); 
-      }, 200);
-    });
+    // 2. WAIT 300ms so the user actually sees the tick
+    setTimeout(() => {
+      // 3. NOW start the slide animation
+      Animated.timing(translateX, {
+        toValue: SCREEN_WIDTH, 
+        duration: 400, 
+        useNativeDriver: true,
+        easing: Easing.out(Easing.poly(4)), 
+      }).start(() => {
+        // 4. Finally remove the data
+        setTimeout(() => {
+          onComplete(item.id); 
+        }, 200);
+      });
+    }, 300); // <--- The "Pause to admire the tick" delay
   };
 
   const handleDelete = () => {
@@ -74,18 +83,21 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
       action === 'delete' ? { backgroundColor: '#FF6347' } : 
       { backgroundColor: 'transparent' } 
     ]}>
+      
       {action === 'complete' && <View style={styles.bgTextContainerLeft}><Text style={styles.bgText}>Completed</Text></View>}
       {action === 'delete' && <View style={styles.bgTextContainerRight}><Text style={styles.bgText}>Deleted</Text></View>}
 
       <Animated.View style={{ transform: [{ translateX }] }}>
         <View style={[styles.item, { backgroundColor: item.color || '#FFF' }]}>
           <View style={styles.itemLeft}>
+            
             <TouchableOpacity 
               style={[styles.square, isChecked && styles.squareChecked]} 
               onPress={handleComplete}
               hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             >
-              {isChecked && <Text style={styles.tick}>✓</Text>}
+              {/* Ensure tick is visible only when checked */}
+              {isChecked && <Feather name="check" size={16} color="#FFF" />}
             </TouchableOpacity>
             
             <View>
@@ -111,8 +123,12 @@ const TaskItem = ({ item, onDelete, onComplete }) => {
             </View>
           </View>
 
-          <TouchableOpacity onPress={handleDelete} style={styles.trashContainer} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-            <Text style={styles.trashIcon}>🗑️</Text>
+          <TouchableOpacity 
+            onPress={handleDelete} 
+            style={styles.trashContainer}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <Feather name="trash-2" size={20} color="#FF6347" />
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -252,18 +268,12 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar style="auto" />
       
-      {/* 1. FIXED HEADER (Outside ScrollView) */}
       <View style={styles.headerWrapper}>
         <Text style={styles.sectionTitle}>My Daily Tasks ✨</Text>
       </View>
       
-      {/* 2. SCROLLABLE CONTENT */}
       <ScrollView 
-        contentContainerStyle={{ 
-          flexGrow: 1, 
-          paddingBottom: 100,
-          paddingHorizontal: 20 // Moved padding here so list aligns with header
-        }} 
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 100, paddingHorizontal: 20 }} 
         keyboardShouldPersistTaps='handled'
       >
         <View style={styles.items}>
@@ -280,7 +290,6 @@ export default function App() {
         </View>
       </ScrollView>
 
-      {/* 3. FLOATING INPUT AREA */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
@@ -304,7 +313,8 @@ export default function App() {
 
         <TouchableOpacity onPress={() => handleAddTask()}>
           <View style={styles.addWrapper}>
-            <Text style={styles.addText}>+</Text>
+            {/* 2. REPLACED TEXT WITH ICON */}
+            <Feather name="plus" size={30} color="#C0C0C0" />
           </View>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -325,52 +335,30 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FDFCF0' },
-
-  // --- NEW FIXED HEADER STYLES ---
-  headerWrapper: {
-    paddingTop: 80,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: '#FDFCF0', // Matches background to hide scrolling items
-    zIndex: 1, // Ensures it stays on top
-  },
+  headerWrapper: { paddingTop: 80, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: '#FDFCF0', zIndex: 1 },
   sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#6A5ACD' },
-  
-  items: { marginTop: 0 }, // Reset margin since header handles it
-  
+  items: { marginTop: 0 },
   taskContainerBackground: { marginBottom: 20, borderRadius: 15, overflow: 'hidden', justifyContent: 'center' },
   bgTextContainerLeft: { position: 'absolute', left: 20, zIndex: 0 },
   bgTextContainerRight: { position: 'absolute', right: 20, zIndex: 0 },
   bgText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', textTransform: 'uppercase' },
-  
-  item: { 
-    padding: 15, 
-    borderRadius: 15, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    shadowColor: "#000", 
-    shadowOffset: { width: 0, height: 2 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 4, 
-    elevation: 2 
-  },
-  
+  item: { padding: 15, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   itemLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1 }, 
+  
+  // CHECKBOX STYLE
   square: { width: 24, height: 24, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 5, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
   squareChecked: { backgroundColor: '#4CAF50', opacity: 1 },
-  tick: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  
+  // Note: Removed "tick" style since we use Vector Icon now
   textCompleted: { textDecorationLine: 'line-through', color: '#666' },
   itemText: { fontSize: 16, color: '#333' },
   timeRow: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginTop: 2 },
   iconSmall: { fontSize: 12, marginRight: 4 },
   timeText: { fontSize: 12, color: '#555', fontWeight: 'bold' }, 
   trashContainer: { padding: 5 },
-  trashIcon: { fontSize: 20, opacity: 0.5 },
   writeTaskWrapper: { position: 'absolute', bottom: 30, width: '100%', flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' },
   input: { paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#FFF', borderRadius: 60, borderColor: '#C0C0C0', borderWidth: 1, width: 180 }, 
   addWrapper: { width: 50, height: 50, backgroundColor: '#FFF', borderRadius: 60, justifyContent: 'center', alignItems: 'center', borderColor: '#C0C0C0', borderWidth: 1 },
-  addText: {},
   iconButton: { width: 45, height: 45, backgroundColor: '#E6E6FA', borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
   iconText: { fontSize: 18 },
 });
