@@ -11,7 +11,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 LogBox.ignoreLogs(['expo-notifications:']);
 
-// Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -26,67 +25,65 @@ Notifications.setNotificationHandler({
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-// --- TASK ITEM COMPONENT ---
 const TaskItem = ({ item, index, onDelete, onComplete }) => {
   const [isChecked, setIsChecked] = useState(false);
   const translateX = useRef(new Animated.Value(0)).current; 
-  
-  // Track which action is happening to show correct text
-  const [action, setAction] = useState(null); // 'complete' or 'delete'
+  const [action, setAction] = useState(null); 
 
   const handleComplete = () => {
     if (isChecked) return; 
     setIsChecked(true);
-    setAction('complete'); // Show Green + Text
+    setAction('complete'); 
 
     Animated.timing(translateX, {
       toValue: SCREEN_WIDTH, 
-      duration: 350, // Slightly faster for snappier feel
+      duration: 600, // Slower, smoother slide (was 350)
       useNativeDriver: true,
-      easing: Easing.out(Easing.poly(4)), // Ultra smooth easing
+      easing: Easing.out(Easing.poly(4)), 
     }).start(() => {
-      onComplete(index); 
+      // Wait 300ms AFTER slide finishes before removing item
+      setTimeout(() => {
+        onComplete(index); 
+      }, 300);
     });
   };
 
   const handleDelete = () => {
-    setAction('delete'); // Show Red + Text
+    setAction('delete'); 
     
     Animated.timing(translateX, {
       toValue: -SCREEN_WIDTH, 
-      duration: 350,
+      duration: 600, // Slower, smoother slide
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)),
     }).start(() => {
-      onDelete(index);
+      // Wait 300ms AFTER slide finishes before removing item
+      setTimeout(() => {
+        onDelete(index);
+      }, 300);
     });
   };
 
   return (
-    // THE BACKGROUND LAYER (Revealed when card slides)
     <View style={[
       styles.taskContainerBackground, 
-      // Change color based on action
       action === 'complete' ? { backgroundColor: '#4CAF50' } : 
       action === 'delete' ? { backgroundColor: '#FF6347' } : 
       { backgroundColor: '#FFF' } 
     ]}>
       
-      {/* TEXT: "Completed" (Visible on Left side) */}
       {action === 'complete' && (
         <View style={styles.bgTextContainerLeft}>
           <Text style={styles.bgText}>Completed</Text>
         </View>
       )}
 
-      {/* TEXT: "Deleted" (Visible on Right side) */}
       {action === 'delete' && (
         <View style={styles.bgTextContainerRight}>
           <Text style={styles.bgText}>Deleted</Text>
         </View>
       )}
 
-      {/* THE WHITE CARD (Slides over the background) */}
       <Animated.View style={{ transform: [{ translateX }] }}>
         <View style={styles.item}>
           <View style={styles.itemLeft}>
@@ -194,7 +191,6 @@ export default function App() {
   const handleAddTask = () => {
     Keyboard.dismiss();
     if (task) {
-      // Configure animation for ADDING a task
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       
       const newTask = { 
@@ -218,9 +214,7 @@ export default function App() {
   }
 
   const deleteTask = (index) => {
-    // CRITICAL: This makes the list fill the gap smoothly
     LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
-    
     let itemsCopy = [...taskItems];
     itemsCopy.splice(index, 1);
     setTaskItems(itemsCopy);
@@ -319,25 +313,10 @@ const styles = StyleSheet.create({
   tasksWrapper: { paddingTop: 80, paddingHorizontal: 20 },
   sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#6A5ACD', marginBottom: 20 },
   items: { marginTop: 10 },
-  
-  // --- BACKGROUND CONTAINER ---
-  taskContainerBackground: {
-    marginBottom: 20, 
-    borderRadius: 15,
-    overflow: 'hidden',
-    justifyContent: 'center', // Centers the text vertically
-  },
-  
-  // --- BACKGROUND TEXT ---
+  taskContainerBackground: { marginBottom: 20, borderRadius: 15, overflow: 'hidden', justifyContent: 'center' },
   bgTextContainerLeft: { position: 'absolute', left: 20, zIndex: 0 },
   bgTextContainerRight: { position: 'absolute', right: 20, zIndex: 0 },
-  bgText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-
+  bgText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', textTransform: 'uppercase' },
   item: { backgroundColor: '#FFF', padding: 15, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   itemLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1 }, 
   square: { width: 24, height: 24, backgroundColor: '#AEC6CF', opacity: 0.4, borderRadius: 5, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
