@@ -19,15 +19,12 @@ export default function App() {
   const [task, setTask] = useState();
   const [taskItems, setTaskItems] = useState([]);
   
-  // STATES FOR INDEPENDENT TIMES
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   
-  // We now store TWO separate times
-  const [notificationTime, setNotificationTime] = useState(null); // For 🔔
-  const [alarmTime, setAlarmTime] = useState(null);               // For ⏰
+  const [notificationTime, setNotificationTime] = useState(null);
+  const [alarmTime, setAlarmTime] = useState(null);
   
-  // Tracks which button opened the picker ('notification' or 'alarm')
   const [editingType, setEditingType] = useState(null); 
 
   useEffect(() => {
@@ -39,15 +36,27 @@ export default function App() {
     }
     
     async function setupNotifications() {
+      const { status } = await Notifications.requestPermissionsAsync();
+      
       if (Platform.OS === 'android') {
+        // 1. STANDARD REMINDER (Gentle)
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
+          name: 'Standard Reminder',
+          importance: Notifications.AndroidImportance.DEFAULT,
+          vibrationPattern: [0, 250, 250, 250], // Soft buzz
+        });
+
+        // 2. URGENT ALARM (Sharp Beep-Beep-Beep feel)
+        await Notifications.setNotificationChannelAsync('alarm-channel', {
+          name: 'High Priority Alarm',
           importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
+          // 0ms delay, 100ms buzz, 50ms pause, 100ms buzz... (Fast & Aggressive)
+          vibrationPattern: [0, 100, 50, 100, 50, 100, 50, 100, 50, 100], 
           lightColor: '#FF231F7C',
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: true,
         });
       }
-      const { status } = await Notifications.requestPermissionsAsync();
     }
     loadTasks();
     setupNotifications();
@@ -58,58 +67,39 @@ export default function App() {
     catch (error) { console.log(error); }
   }
 
-  // --- NEW LOGIC FOR INDEPENDENT TIMES ---
   const handleIconPress = (type) => {
-    // 1. If we click a button that already has a time set, we CLEAR it (Toggle Off)
-    if (type === 'notification' && notificationTime) {
-      setNotificationTime(null);
-      return;
-    }
-    if (type === 'alarm' && alarmTime) {
-      setAlarmTime(null);
-      return;
-    }
-
-    // 2. Otherwise, we open the picker for that specific type
-    setEditingType(type); // Remember what we are editing
+    if (type === 'notification' && notificationTime) { setNotificationTime(null); return; }
+    if (type === 'alarm' && alarmTime) { setAlarmTime(null); return; }
+    setEditingType(type);
     setShowPicker(true);
   };
 
   const onChangeTime = (event, selectedDate) => {
     setShowPicker(false);
     if (selectedDate) {
-      setDate(selectedDate); // Sync calendar position
-      
-      // Save to the correct state variable
-      if (editingType === 'notification') {
-        setNotificationTime(selectedDate);
-      } else if (editingType === 'alarm') {
-        setAlarmTime(selectedDate);
-      }
+      setDate(selectedDate);
+      if (editingType === 'notification') setNotificationTime(selectedDate);
+      else if (editingType === 'alarm') setAlarmTime(selectedDate);
     }
-    // Reset editing type
     setEditingType(null);
   };
 
   const handleAddTask = () => {
     Keyboard.dismiss();
     if (task) {
-      // We save both times into the task object
       const newTask = { 
         text: task, 
-        notificationTime: notificationTime, // Date or null
-        alarmTime: alarmTime                // Date or null
+        notificationTime: notificationTime,
+        alarmTime: alarmTime
       };
       
       const newItems = [...taskItems, newTask];
       setTaskItems(newItems);
       saveTasksToPhone(newItems);
       
-      // Schedule Alerts independently
       if (notificationTime) scheduleAlarm(task, notificationTime, 'notification');
       if (alarmTime)        scheduleAlarm(task, alarmTime, 'alarm');
       
-      // Reset everything
       setTask(null);
       setNotificationTime(null);
       setAlarmTime(null);
@@ -128,12 +118,21 @@ export default function App() {
     const triggerInSeconds = (triggerDate.getTime() - now.getTime()) / 1000;
     if (triggerInSeconds <= 0) return;
 
-    const title = type === 'alarm' ? "⏰ ALARM!" : "✨ Reminder";
-    const body = type === 'alarm' ? `URGENT: ${taskName}` : `Don't forget: ${taskName}`;
-
+    const isAlarm = type === 'alarm';
+    
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: 'default' },
-      trigger: { type: 'timeInterval', seconds: triggerInSeconds, channelId: 'default' },
+      content: {
+        title: isAlarm ? "⏰ ALARM!" : "✨ Reminder",
+        body: isAlarm ? `ALARM: ${taskName}` : `Don't forget: ${taskName}`,
+        sound: 'default', // Custom sounds require standalone build
+        sticky: isAlarm, 
+        priority: isAlarm ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.DEFAULT,
+      },
+      trigger: {
+        type: 'timeInterval',
+        seconds: triggerInSeconds,
+        channelId: isAlarm ? 'alarm-channel' : 'default', 
+      },
     });
   };
 
@@ -154,10 +153,7 @@ export default function App() {
                         <View style={styles.square}></View>
                         <View>
                           <Text style={styles.itemText}>{item.text}</Text>
-                          
-                          {/* SHOW TIMES (Render separate rows if both exist) */}
                           <View style={{marginTop: 5}}>
-                            {/* Notification Row */}
                             {item.notificationTime && (
                               <View style={styles.timeRow}>
                                 <Text style={styles.iconSmall}>🔔</Text>
@@ -166,8 +162,6 @@ export default function App() {
                                 </Text>
                               </View>
                             )}
-                            
-                            {/* Alarm Row */}
                             {item.alarmTime && (
                               <View style={styles.timeRow}>
                                 <Text style={styles.iconSmall}>⏰</Text>
@@ -177,7 +171,6 @@ export default function App() {
                               </View>
                             )}
                           </View>
-
                         </View>
                       </View>
                       <View style={styles.circular}></View>
@@ -196,26 +189,16 @@ export default function App() {
       >
         <TextInput style={styles.input} placeholder={'Write a task'} value={task} onChangeText={text => setTask(text)} />
         
-        {/* BUTTON 1: Notification (Bell) */}
         <TouchableOpacity 
           onPress={() => handleIconPress('notification')} 
-          style={[
-            styles.iconButton, 
-            // If notificationTime is set, turn Blue
-            notificationTime ? {backgroundColor: '#AEC6CF', borderWidth: 2, borderColor: '#fff'} : null
-          ]}
+          style={[styles.iconButton, notificationTime ? {backgroundColor: '#AEC6CF', borderWidth: 2, borderColor: '#fff'} : null]}
         >
            <Text style={styles.iconText}>🔔</Text>
         </TouchableOpacity>
 
-        {/* BUTTON 2: Alarm (Clock) */}
         <TouchableOpacity 
           onPress={() => handleIconPress('alarm')} 
-          style={[
-            styles.iconButton, 
-            // If alarmTime is set, turn Orange
-            alarmTime ? {backgroundColor: '#FFDAB9', borderWidth: 2, borderColor: '#fff'} : null
-          ]}
+          style={[styles.iconButton, alarmTime ? {backgroundColor: '#FFDAB9', borderWidth: 2, borderColor: '#fff'} : null]}
         >
            <Text style={styles.iconText}>⏰</Text>
         </TouchableOpacity>
@@ -250,12 +233,9 @@ const styles = StyleSheet.create({
   itemLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   square: { width: 24, height: 24, backgroundColor: '#AEC6CF', opacity: 0.4, borderRadius: 5, marginRight: 15 },
   itemText: { maxWidth: '80%', fontSize: 16, color: '#333' },
-  
-  // Updated Time Rows
   timeRow: { flexDirection: 'row', alignItems: 'center', marginRight: 10, marginTop: 2 },
   iconSmall: { fontSize: 12, marginRight: 4 },
   timeText: { fontSize: 12, color: '#888', fontWeight: 'bold' }, 
-  
   circular: { width: 12, height: 12, borderColor: '#FFDAB9', borderWidth: 2, borderRadius: 5 },
   writeTaskWrapper: { position: 'absolute', bottom: 30, width: '100%', flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' },
   input: { paddingVertical: 15, paddingHorizontal: 15, backgroundColor: '#FFF', borderRadius: 60, borderColor: '#C0C0C0', borderWidth: 1, width: 180 }, 
