@@ -37,11 +37,10 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
 
     Animated.timing(translateX, {
       toValue: SCREEN_WIDTH, 
-      duration: 600, // Slower, smoother slide (was 350)
+      duration: 600, 
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)), 
     }).start(() => {
-      // Wait 300ms AFTER slide finishes before removing item
       setTimeout(() => {
         onComplete(index); 
       }, 300);
@@ -53,11 +52,10 @@ const TaskItem = ({ item, index, onDelete, onComplete }) => {
     
     Animated.timing(translateX, {
       toValue: -SCREEN_WIDTH, 
-      duration: 600, // Slower, smoother slide
+      duration: 600,
       useNativeDriver: true,
       easing: Easing.out(Easing.poly(4)),
     }).start(() => {
-      // Wait 300ms AFTER slide finishes before removing item
       setTimeout(() => {
         onDelete(index);
       }, 300);
@@ -171,9 +169,14 @@ export default function App() {
     catch (error) { console.log(error); }
   }
 
+  // --- UPDATED LOGIC HERE ---
   const handleIconPress = (type) => {
     if (type === 'notification' && notificationTime) { setNotificationTime(null); return; }
     if (type === 'alarm' && alarmTime) { setAlarmTime(null); return; }
+    
+    // FIX: Update the picker to the CURRENT time right now!
+    setDate(new Date()); 
+    
     setEditingType(type);
     setShowPicker(true);
   };
